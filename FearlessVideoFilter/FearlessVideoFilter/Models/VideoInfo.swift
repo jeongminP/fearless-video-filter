@@ -35,37 +35,37 @@ struct Clip: Codable {
 
 
 // MARK: - JSON Data
-class VideoInfo: Decodable {
-    var videoName: String
+struct VideoInfo: Decodable {
+    let videoName: String?
     
     init(videoName: String) {
         self.videoName = videoName
     }
     
     static func makeDummyData() -> [VideoInfo] {
-        let dummyData: [VideoInfo] = load("VideoInfoData.json")
+        let dummyData: [VideoInfo] = VideoInfo.load("VideoInfoData.json")
         return dummyData
     }
-}
-
-func load<T: Decodable>(_ filename: String) -> T {
-    let data: Data
     
-    guard let file = Bundle.main.url(forResource: filename, withExtension: nil)
-    else {
-        fatalError("Couldn't find \(filename) in main bundle.")
-    }
-    
-    do {
-        data = try Data(contentsOf: file)
-    } catch {
-        fatalError("Couldn't load \(filename) from main bundle:\n\(error)")
-    }
-    
-    do {
-        let decoder = JSONDecoder()
-        return try decoder.decode(T.self, from: data)
-    } catch {
-        fatalError("Couldn't parse \(filename) as \(T.self):\n\(error)")
+    static func load<T: Decodable>(_ filename: String) -> T {
+        let data: Data
+        
+        guard let file = Bundle.main.url(forResource: filename, withExtension: nil)
+        else {
+            fatalError("Couldn't find \(filename) in main bundle.")
+        }
+        
+        do {
+            data = try Data(contentsOf: file)
+        } catch {
+            fatalError("Couldn't load \(filename) from main bundle:\n\(error)")
+        }
+        
+        do {
+            let decoder = JSONDecoder()
+            return try decoder.decode(T.self, from: data)
+        } catch {
+            fatalError("Couldn't parse \(filename) as \(T.self):\n\(error)")
+        }
     }
 }
