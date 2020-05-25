@@ -10,10 +10,10 @@ import Foundation
 import AVFoundation
 import AVKit
 
-class FilteredPlayerItem: NSObject {
-    var videoURL: URL
-    private var asset: AVAsset
-    private(set) var playerItem: AVPlayerItem
+final class FilteredPlayerItem: NSObject {
+    private let videoURL: URL
+    private let asset: AVAsset
+    let playerItem: AVPlayerItem
     
     // 임의로 지정한 blur의 강도
     let blurIntensity = 10.0

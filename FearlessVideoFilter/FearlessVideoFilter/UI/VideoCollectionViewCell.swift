@@ -7,16 +7,39 @@
 //
 
 import UIKit
+import SDWebImage
 
-class VideoCollectionViewCell: UICollectionViewCell {
-    @IBOutlet weak var thumbnailImageView: UIImageView!
-    @IBOutlet weak var titleLabel: UILabel!
-    @IBOutlet weak var videoLengthLabel: UILabel!
-    @IBOutlet weak var channelEmblemImageView: UIImageView!
+final class VideoCollectionViewCell: UICollectionViewCell {
+    @IBOutlet weak private var thumbnailImageView: UIImageView?
+    @IBOutlet weak private var titleLabel: UILabel?
+    @IBOutlet weak private var videoLengthLabel: UILabel?
+    @IBOutlet weak private var channelEmblemImageView: UIImageView?
     
     override func awakeFromNib() {
         super.awakeFromNib()
         // Initialization code
+    }
+    
+    override func prepareForReuse() {
+        thumbnailImageView?.image = nil
+        channelEmblemImageView?.image = nil
+        super.prepareForReuse()
+    }
+    
+    func setThumbnailImage(with url: URL) {
+            thumbnailImageView?.sd_setImage(with: url, completed: nil)
+    }
+    
+    func setChannelEmblemImage(with url: URL) {
+            channelEmblemImageView?.sd_setImage(with: url, completed: nil)
+    }
+    
+    func setTitle(_ title: String) {
+        titleLabel?.text = title
+    }
+    
+    func setChannelName(channelName: String, videoLength: String) {
+        videoLengthLabel?.text = channelName + " • " + videoLength
     }
 
 }
