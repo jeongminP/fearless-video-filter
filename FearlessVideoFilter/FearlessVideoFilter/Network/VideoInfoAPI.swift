@@ -13,7 +13,7 @@ import Alamofire
 // MARK: - REQUEST
 class NetworkRequest {
     static let shared: NetworkRequest = NetworkRequest()
-    let baseUrl = "http://27.96.131.40:10001/api/v1/clip"
+    let baseUrl = "http://15.164.225.128/api/v1/clip"
     
     enum API: String {
         case videoInfo = "/list"
