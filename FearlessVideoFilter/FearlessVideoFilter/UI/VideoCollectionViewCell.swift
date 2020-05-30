@@ -17,7 +17,7 @@ final class VideoCollectionViewCell: UICollectionViewCell {
     
     override func awakeFromNib() {
         super.awakeFromNib()
-        // Initialization code
+        setupLayout()
     }
     
     override func prepareForReuse() {
@@ -40,6 +40,15 @@ final class VideoCollectionViewCell: UICollectionViewCell {
     
     func setChannelName(channelName: String, videoLength: String) {
         videoLengthLabel?.text = channelName + " • " + videoLength
+    }
+    
+    // MARK: - layout
+    private func setupLayout() {
+        guard let channelEmblemImageView = channelEmblemImageView else { return }
+        channelEmblemImageView.layer.cornerRadius = channelEmblemImageView.frame.width / 2
+        channelEmblemImageView.layer.borderWidth = 1
+        channelEmblemImageView.layer.borderColor = UIColor.clear.cgColor
+        channelEmblemImageView.clipsToBounds = true
     }
 
 }
