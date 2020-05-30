@@ -22,13 +22,6 @@ final class MainViewController: UIViewController {
     private var hasNext: Bool = true
     private var page: Int = 1
     
-    
-    // Response Header에 넘어오는 code 값에 따라 success, failure 분리.
-    enum ResponseCode: Int {
-        case success = 0
-        case failure = -1000
-    }
-    
     override func viewDidLoad() {
         super.viewDidLoad()
         guard let collectionView = collectionView else { return }
@@ -172,6 +165,7 @@ extension MainViewController: UICollectionViewDelegate, UICollectionViewDelegate
                 let code = response.header.code else { return }
             
             if code == ResponseCode.success.rawValue {
+                DispatchQueue.main.async {
                 let videoIndex = indexPath.row % strongSelf.dummyArr.count
                 guard let videoName = strongSelf.dummyArr[videoIndex].videoName,
                     let filters = response.body.filters,
@@ -181,7 +175,7 @@ extension MainViewController: UICollectionViewDelegate, UICollectionViewDelegate
                 let filteredItem = FilteredPlayerItem(videoURL: videoURL, filterArray: filters, animationRate: 1.0)
                 controller.playerItem = filteredItem.playerItem
                 strongSelf.navigationController?.pushViewController(controller, animated: false)
-                
+                }
             } else if code == ResponseCode.failure.rawValue {
                 print("Response Failure: code \(code)")
             }

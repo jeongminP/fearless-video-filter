@@ -27,8 +27,10 @@ class NetworkRequest {
     // API 요청 함수.
     // videoInfo와 filterInfo에서 같은 함수를 사용할 수 있도록 변경.
     func requestVideoInfo<Response: Decodable>(api: API, method: Alamofire.HTTPMethod, parameters: Parameters? = nil, encoding: URLEncoding? = nil, completion handler: @escaping (Response) -> Void) {
+        let queue = DispatchQueue(label: "com.hackday2020.response-queue", qos: .background, attributes: [.concurrent])
+        
         // responseDecodable
-        AF.request(baseUrl+api.rawValue, method: .get, parameters: parameters).responseDecodable(of: Response.self) { (response) in
+        AF.request(baseUrl+api.rawValue, method: .get, parameters: parameters)            .responseDecodable(of: Response.self, queue: queue) { (response) in
             switch response.result {
             case .success(let object):
                 handler(object)
@@ -37,4 +39,10 @@ class NetworkRequest {
             }
         }
     }
+}
+
+// Response Header에 넘어오는 code 값에 따라 success, failure 분리.
+enum ResponseCode: Int {
+    case success = 0
+    case failure = -1000
 }
