@@ -10,6 +10,7 @@ import Foundation
 import UIKit
 import AVFoundation
 import SnapKit
+import Alamofire
 
 final class VideoViewController: UIViewController {
     static let closeButtonImageName = "SF_xmark_square_fill"
@@ -37,7 +38,9 @@ final class VideoViewController: UIViewController {
     }()
     
     // MARK: - Variables
-    var playerItem: AVPlayerItem?
+    var clipNo: Int?
+    var videoURL: URL?
+    private var filteredPlayerItem: FilteredPlayerItem?
     private var player: AVPlayer?
     private var playerLayer: AVPlayerLayer?
     private var previusStatusBeforeChangingSlider: AVPlayer.TimeControlStatus = .paused
@@ -63,6 +66,7 @@ final class VideoViewController: UIViewController {
     // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
+        requestFilterInfo()
         prepareToPlay()
         playerLayer = AVPlayerLayer(player: player)
         
@@ -101,7 +105,9 @@ final class VideoViewController: UIViewController {
     
     // MARK: - Setup
     private func prepareToPlay() {
-        player = AVPlayer(playerItem: playerItem)
+        guard let videoURL = videoURL else { return }
+        filteredPlayerItem = FilteredPlayerItem(videoURL: videoURL)
+        player = AVPlayer(playerItem: filteredPlayerItem?.playerItem)
         setupPlayerObservers()
     }
     
@@ -147,6 +153,24 @@ final class VideoViewController: UIViewController {
         self.view.layoutIfNeeded()
         if let bounds = containerView?.bounds {
             playerLayer?.frame = bounds
+        }
+    }
+    
+    // MARK: - Network Request
+    private func requestFilterInfo() {
+        guard let clipNo = clipNo else { return }
+        let params: Parameters = ["clipNo": String(clipNo)]
+        NetworkRequest.shared.requestVideoInfo(api: .filterInfo, method: .get, parameters: params, encoding: URLEncoding.queryString) { [weak self] (response: FilterAPI) in
+            guard let strongSelf = self,
+                let code = response.header.code else { return }
+            
+            if code == ResponseCode.success.rawValue {
+                guard let filters = response.body.filters else { return }
+                strongSelf.filteredPlayerItem?.blur(filterArray: filters, animationRate: 1.0)
+                
+            } else if code == ResponseCode.failure.rawValue {
+                print("Response Failure: code \(code)")
+            }
         }
     }
     

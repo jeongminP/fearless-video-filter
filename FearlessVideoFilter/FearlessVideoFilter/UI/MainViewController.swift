@@ -158,27 +158,14 @@ extension MainViewController: UICollectionViewDelegate, UICollectionViewDelegate
     }
     
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        guard let clipno = infoArr[indexPath.item].clipNo else { return }
-        let params: Parameters = ["clipNo": String(clipno)]
-        NetworkRequest.shared.requestVideoInfo(api: .filterInfo, method: .get, parameters: params, encoding: URLEncoding.queryString) { [weak self] (response: FilterAPI) in
-            guard let strongSelf = self,
-                let code = response.header.code else { return }
-            
-            if code == ResponseCode.success.rawValue {
-                DispatchQueue.main.async {
-                let videoIndex = indexPath.row % strongSelf.dummyArr.count
-                guard let videoName = strongSelf.dummyArr[videoIndex].videoName,
-                    let filters = response.body.filters,
-                    let videoURL = Bundle.main.url(forResource: strongSelf.getURL(videoName)[0], withExtension: strongSelf.getURL(videoName)[1]),
-                    let controller = UIStoryboard.init(name: "Main", bundle: Bundle.main).instantiateViewController(withIdentifier: "VideoViewController") as? VideoViewController else { return }
-                
-                let filteredItem = FilteredPlayerItem(videoURL: videoURL, filterArray: filters, animationRate: 1.0)
-                controller.playerItem = filteredItem.playerItem
-                strongSelf.navigationController?.pushViewController(controller, animated: false)
-                }
-            } else if code == ResponseCode.failure.rawValue {
-                print("Response Failure: code \(code)")
-            }
-        }
+        let videoIndex = indexPath.row % dummyArr.count
+        guard let videoName = dummyArr[videoIndex].videoName,
+            let videoURL = Bundle.main.url(forResource: getURL(videoName)[0], withExtension: getURL(videoName)[1]),
+            let clipno = infoArr[indexPath.item].clipNo,
+            let controller = UIStoryboard.init(name: "Main", bundle: Bundle.main).instantiateViewController(withIdentifier: "VideoViewController") as? VideoViewController else { return }
+        
+        controller.clipNo = clipno
+        controller.videoURL = videoURL
+        navigationController?.pushViewController(controller, animated: false)
     }
 }
