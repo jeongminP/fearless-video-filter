@@ -12,8 +12,8 @@ import AVKit
 import Alamofire
 import SDWebImage
 
-class MainViewController: UIViewController {
-    @IBOutlet weak var collectionView: UICollectionView!
+final class MainViewController: UIViewController {
+    @IBOutlet weak private var collectionView: UICollectionView?
     
     private let dummyArr: [VideoInfo] = VideoInfo.makeDummyData()
     
@@ -22,15 +22,10 @@ class MainViewController: UIViewController {
     private var hasNext: Bool = true
     private var page: Int = 1
     
-    
-    // Response Header에 넘어오는 code 값에 따라 success, failure 분리.
-    enum ResponseCode: Int {
-        case success = 0
-        case failure = -1000
-    }
-    
     override func viewDidLoad() {
         super.viewDidLoad()
+        guard let collectionView = collectionView else { return }
+        
         collectionView.delegate = self
         collectionView.dataSource = self
         collectionView.prefetchDataSource = self
@@ -38,17 +33,20 @@ class MainViewController: UIViewController {
         let nibName = UINib(nibName: "VideoCollectionViewCell", bundle: nil)
         collectionView.register(nibName, forCellWithReuseIdentifier: "VideoCollectionViewCell")
         
-        NetworkRequest.shared.requestVideoInfo(api: .videoInfo, method: .get) { (response: APIStruct) in
-            guard let code = response.header.code else { return }
+        NetworkRequest.shared.requestVideoInfo(api: .videoInfo, method: .get) { [weak self] (response: APIStruct) in
+            guard let strongSelf = self,
+                let code = response.header.code else { return }
             let body = response.body
             if code == ResponseCode.success.rawValue {
                 if let next = body.hasNext {
-                    self.hasNext = next
+                    strongSelf.hasNext = next
                 }
                 if let data = body.clips {
-                    self.infoArr = data
+                    strongSelf.infoArr = data
                 }
-                self.collectionView.reloadData()
+                DispatchQueue.main.async {
+                    strongSelf.collectionView?.reloadData()
+                }
             } else if code == ResponseCode.failure.rawValue {
                 print("Response Failure: code \(code)")
             }
@@ -59,7 +57,7 @@ class MainViewController: UIViewController {
     // 화면 회전 시 cell size가 업데이트되지 않는 현상 방지
     override func viewWillLayoutSubviews() {
         super.viewWillLayoutSubviews()
-        collectionView.reloadData()
+        collectionView?.reloadData()
     }
     
     // 파일의 이름과 확장자를 .으로 분리.
@@ -87,18 +85,23 @@ extension MainViewController: UICollectionViewDataSource, UICollectionViewDataSo
         let infoData = infoArr[indexPath.item]
         
         // thumbnailUrl을 호출할 때, ?type=f480을 호출하기 위한 변수
-        if let thumbnailUrl = infoData.thumbnailUrl {
-            cell.thumbnailImageView.sd_setImage(with: URL(string: thumbnailUrl + "?type=f480"))
+        if let thumbnailUrlString = infoData.thumbnailUrl,
+            let thumbnailImageURL = URL(string: thumbnailUrlString + "?type=f480") {
+            cell.setThumbnailImage(with: thumbnailImageURL)
         }
         
         // channelEmblemUrl을 호출할 때, ?type=f200을 호출하기 위한 변수
-        if let channelEmblemUrl = infoData.channelEmblemUrl {
-            cell.channelEmblemImageView.sd_setImage(with: URL(string: channelEmblemUrl + "?type=f200"))
+        if let channelEmblemURLString = infoData.channelEmblemUrl,
+            let channelEmblemURL = URL(string: channelEmblemURLString + "?type=f200") {
+            cell.setChannelEmblemImage(with: channelEmblemURL)
         }
         
-        cell.titleLabel.text = infoData.title
+        if let title = infoData.title {
+            cell.setTitle(title)
+        }
         
-        if let duration = infoData.duration {
+        if let channelName = infoData.channelName,
+            let duration = infoData.duration {
             let minute: Int = duration / 60
             let seconds: Int = duration % 60
             
@@ -113,9 +116,9 @@ extension MainViewController: UICollectionViewDataSource, UICollectionViewDataSo
                 } else {
                     formatter.dateFormat = "mm:ss"
                 }
-                if let channelName = infoData.channelName {
-                    cell.videoLengthLabel.text = channelName + " • " + formatter.string(from: date)
-                }
+                cell.setChannelName(channelName: channelName, videoLength: formatter.string(from: date))
+            } else {
+                cell.setChannelName(channelName: channelName, videoLength: "")
             }
         }
         
@@ -127,19 +130,22 @@ extension MainViewController: UICollectionViewDataSource, UICollectionViewDataSo
         guard let lastIndex = indexPaths.last?.item, lastIndex > infoArr.count - 4, hasNext == true else { return }
         page += 1
         let params: Parameters = ["page": String(page)]
-        NetworkRequest.shared.requestVideoInfo(api: .videoInfo, method: .get, parameters: params, encoding: URLEncoding.queryString) { (response: APIStruct) in
-                guard let code = response.header.code else { return }
-                if code == ResponseCode.success.rawValue {
-                    if let next = response.body.hasNext {
-                        self.hasNext = next
-                    }
-                    if let data = response.body.clips {
-                        self.infoArr.append(contentsOf: data)
-                    }
-                    self.collectionView.reloadData()
-                } else if code == ResponseCode.failure.rawValue {
-                    print("Response Failure: code \(code)")
+        NetworkRequest.shared.requestVideoInfo(api: .videoInfo, method: .get, parameters: params, encoding: URLEncoding.queryString) { [weak self] (response: APIStruct) in
+            guard let strongSelf = self,
+                    let code = response.header.code else { return }
+            if code == ResponseCode.success.rawValue {
+                if let next = response.body.hasNext {
+                    strongSelf.hasNext = next
                 }
+                if let data = response.body.clips {
+                    strongSelf.infoArr.append(contentsOf: data)
+                }
+                DispatchQueue.main.async {
+                    strongSelf.collectionView?.reloadData()
+                }
+            } else if code == ResponseCode.failure.rawValue {
+                print("Response Failure: code \(code)")
+            }
         }
     }
 }
@@ -152,25 +158,14 @@ extension MainViewController: UICollectionViewDelegate, UICollectionViewDelegate
     }
     
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        guard let clipno = infoArr[indexPath.item].clipNo else { return }
-        let params: Parameters = ["clipNo": String(clipno)]
-        NetworkRequest.shared.requestVideoInfo(api: .filterInfo, method: .get, parameters: params, encoding: URLEncoding.queryString) { (response: FilterAPI) in
-            guard let code = response.header.code else { return }
-            
-            if code == ResponseCode.success.rawValue {
-                let videoIndex = indexPath.row % self.dummyArr.count
-                let videoName = self.getURL(self.dummyArr[videoIndex].videoName)
-                guard let filters = response.body.filters,
-                    let videoURL = Bundle.main.url(forResource: videoName[0], withExtension: videoName[1]),
-                    let controller = UIStoryboard.init(name: "Main", bundle: Bundle.main).instantiateViewController(withIdentifier: "VideoViewController") as? VideoViewController else { return }
-                
-                let filteredItem = FilteredPlayerItem(videoURL: videoURL, filterArray: filters, animationRate: 1.0)
-                controller.playerItem = filteredItem.playerItem
-                self.navigationController?.pushViewController(controller, animated: false)
-                
-            } else if code == ResponseCode.failure.rawValue {
-                print("Response Failure: code \(code)")
-            }
-        }
+        let videoIndex = indexPath.row % dummyArr.count
+        guard let videoName = dummyArr[videoIndex].videoName,
+            let videoURL = Bundle.main.url(forResource: getURL(videoName)[0], withExtension: getURL(videoName)[1]),
+            let clipno = infoArr[indexPath.item].clipNo,
+            let controller = UIStoryboard.init(name: "Main", bundle: Bundle.main).instantiateViewController(withIdentifier: "VideoViewController") as? VideoViewController else { return }
+        
+        controller.clipNo = clipno
+        controller.videoURL = videoURL
+        navigationController?.pushViewController(controller, animated: false)
     }
 }

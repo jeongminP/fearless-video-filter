@@ -10,10 +10,10 @@ import Foundation
 import AVFoundation
 import AVKit
 
-class FilteredPlayerItem: NSObject {
-    var videoURL: URL
-    private var asset: AVAsset
-    private(set) var playerItem: AVPlayerItem
+final class FilteredPlayerItem: NSObject {
+    private let videoURL: URL
+    private let asset: AVAsset
+    let playerItem: AVPlayerItem
     
     // 임의로 지정한 blur의 강도
     let blurIntensity = 10.0
@@ -31,7 +31,7 @@ class FilteredPlayerItem: NSObject {
     
     func blur(filterArray: [Filter], animationRate: Double) {
         if filterArray.isEmpty { return }
-        
+        let postprocessedFilters = Filter.postprocessedData(filterArray: filterArray)
         let blurParam = blurIntensity / animationRate
         
         let filter = CIFilter(name: "CIGaussianBlur")!
@@ -42,7 +42,7 @@ class FilteredPlayerItem: NSObject {
             
             // 비디오 타이밍에 따라 필터 파라미터가 달라짐
             let seconds = CMTimeGetSeconds(request.compositionTime)
-            if let (start, end) = self.filteringSection(at: seconds, of: filterArray) {
+            if let (start, end) = Filter.filteringSection(at: seconds, of: postprocessedFilters) {
                 if seconds < start + animationRate {
                     filter.setValue((seconds-start) * blurParam, forKey: kCIInputRadiusKey)
                 } else if seconds < end - animationRate {
@@ -64,14 +64,4 @@ class FilteredPlayerItem: NSObject {
         self.playerItem.videoComposition = composition
     }
     
-    private func filteringSection(at seconds: Double, of filterArray: [Filter]) -> (Double, Double)? {
-        for item in filterArray {
-            guard let start = item.startPosition,
-                let end = item.endPosition else { return nil }
-            if seconds > Double(start) && seconds < Double(end) {
-                return (Double(start), Double(end))
-            }
-        }
-        return nil
-    }
 }

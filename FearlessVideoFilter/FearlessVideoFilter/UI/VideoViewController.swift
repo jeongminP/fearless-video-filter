@@ -10,8 +10,9 @@ import Foundation
 import UIKit
 import AVFoundation
 import SnapKit
+import Alamofire
 
-class VideoViewController: UIViewController {
+final class VideoViewController: UIViewController {
     static let closeButtonImageName = "SF_xmark_square_fill"
     static let stepForwardButtonImageName = "SF_goforward_15"
     static let stepBackwardButtonImageName = "SF_goforward_15"
@@ -37,7 +38,9 @@ class VideoViewController: UIViewController {
     }()
     
     // MARK: - Variables
-    var playerItem: AVPlayerItem?
+    var clipNo: Int?
+    var videoURL: URL?
+    private var filteredPlayerItem: FilteredPlayerItem?
     private var player: AVPlayer?
     private var playerLayer: AVPlayerLayer?
     private var previusStatusBeforeChangingSlider: AVPlayer.TimeControlStatus = .paused
@@ -50,19 +53,20 @@ class VideoViewController: UIViewController {
     private var playerTimeControlStatusObserver: NSKeyValueObservation?
 
     // MARK: - IBOutlet Propertise
-    @IBOutlet weak var containerView: UIView!
-    @IBOutlet weak var closeButton: UIButton!
-    @IBOutlet weak var playbackControlsView: UIView!
-    @IBOutlet weak var stepBackwardButton: UIButton!
-    @IBOutlet weak var playPauseButton: UIButton!
-    @IBOutlet weak var stepForwardButton: UIButton!
-    @IBOutlet weak var elapsedTimeLabel: UILabel!
-    @IBOutlet weak var remainingTimeLabel: UILabel!
-    @IBOutlet weak var timeSlider: UISlider!
+    @IBOutlet weak private var containerView: UIView?
+    @IBOutlet weak private var closeButton: UIButton?
+    @IBOutlet weak private var playbackControlsView: UIView?
+    @IBOutlet weak private var stepBackwardButton: UIButton?
+    @IBOutlet weak private var playPauseButton: UIButton?
+    @IBOutlet weak private var stepForwardButton: UIButton?
+    @IBOutlet weak private var elapsedTimeLabel: UILabel?
+    @IBOutlet weak private var remainingTimeLabel: UILabel?
+    @IBOutlet weak private var timeSlider: UISlider?
     
     // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
+        requestFilterInfo()
         prepareToPlay()
         playerLayer = AVPlayerLayer(player: player)
         
@@ -70,7 +74,7 @@ class VideoViewController: UIViewController {
         playerLayer.videoGravity = .resizeAspectFill
         
         // containerView에 playerLayer를 추가하여 동영상을 표시
-        containerView.layer.addSublayer(playerLayer)
+        containerView?.layer.addSublayer(playerLayer)
         setupLayout()
     }
 
@@ -101,7 +105,9 @@ class VideoViewController: UIViewController {
     
     // MARK: - Setup
     private func prepareToPlay() {
-        player = AVPlayer(playerItem: playerItem)
+        guard let videoURL = videoURL else { return }
+        filteredPlayerItem = FilteredPlayerItem(videoURL: videoURL)
+        player = AVPlayer(playerItem: filteredPlayerItem?.playerItem)
         setupPlayerObservers()
     }
     
@@ -109,8 +115,8 @@ class VideoViewController: UIViewController {
         self.navigationController?.setNavigationBarHidden(true, animated: false)
         self.navigationController?.interactivePopGestureRecognizer?.delegate = nil
         
-        closeButton.layer.cornerRadius = closeButtonCornerRadius
-        playbackControlsView.layer.cornerRadius = playbackControlsViewCornerRadius
+        closeButton?.layer.cornerRadius = closeButtonCornerRadius
+        playbackControlsView?.layer.cornerRadius = playbackControlsViewCornerRadius
         
         let closeButtonImage = UIImage(named: VideoViewController.closeButtonImageName)
         setButtonImage(with: closeButtonImage, of: closeButton)
@@ -128,7 +134,7 @@ class VideoViewController: UIViewController {
 
         if width < height {     // portrait mode
             let newHeight = width / containerViewAspect
-            containerView.snp.remakeConstraints { make in
+            containerView?.snp.remakeConstraints { make in
                 make.leading.equalToSuperview()
                 make.trailing.equalToSuperview()
                 make.height.equalTo(newHeight)
@@ -136,7 +142,7 @@ class VideoViewController: UIViewController {
             }
         } else {                // landscape mode
             let newWidth = height * containerViewAspect
-            containerView.snp.remakeConstraints { make in
+            containerView?.snp.remakeConstraints { make in
                 make.top.equalToSuperview()
                 make.bottom.equalToSuperview()
                 make.width.equalTo(newWidth)
@@ -145,7 +151,27 @@ class VideoViewController: UIViewController {
         }
         
         self.view.layoutIfNeeded()
-        playerLayer?.frame = containerView.bounds
+        if let bounds = containerView?.bounds {
+            playerLayer?.frame = bounds
+        }
+    }
+    
+    // MARK: - Network Request
+    private func requestFilterInfo() {
+        guard let clipNo = clipNo else { return }
+        let params: Parameters = ["clipNo": String(clipNo)]
+        NetworkRequest.shared.requestVideoInfo(api: .filterInfo, method: .get, parameters: params, encoding: URLEncoding.queryString) { [weak self] (response: FilterAPI) in
+            guard let strongSelf = self,
+                let code = response.header.code else { return }
+            
+            if code == ResponseCode.success.rawValue {
+                guard let filters = response.body.filters else { return }
+                strongSelf.filteredPlayerItem?.blur(filterArray: filters, animationRate: 1.0)
+                
+            } else if code == ResponseCode.failure.rawValue {
+                print("Response Failure: code \(code)")
+            }
+        }
     }
     
     // MARK: - Key-Value Observing
@@ -154,39 +180,40 @@ class VideoViewController: UIViewController {
             let currentItem = player.currentItem else { return }
         
         playerTimeControlStatusObserver = player.observe(\AVPlayer.timeControlStatus,
-                                                         options: [.initial, .new]) { [unowned self] _, _ in
+                                                         options: [.initial, .new]) { [weak self] _, _ in
             DispatchQueue.main.async {
-                self.setPlayPauseButtonImage()
+                self?.setPlayPauseButtonImage()
             }
         }
         
         let interval = CMTime(value: 1, timescale: 2)
         timeObserverToken = player.addPeriodicTimeObserver(forInterval: interval,
-                                                           queue: .main) { [unowned self] time in
+                                                           queue: .main) { [weak self] time in
+            guard let strongSelf = self else { return }
             let timeElapsed = Float(time.seconds)
             let durationSeconds = Float(currentItem.duration.seconds)
-            self.timeSlider.value = timeElapsed
-            self.elapsedTimeLabel.text = self.createTimeString(time: timeElapsed)
-            self.remainingTimeLabel.text = self.createTimeString(time: timeElapsed - durationSeconds)
+            strongSelf.timeSlider?.value = timeElapsed
+            strongSelf.elapsedTimeLabel?.text = strongSelf.createTimeString(time: timeElapsed)
+            strongSelf.remainingTimeLabel?.text = strongSelf.createTimeString(time: timeElapsed - durationSeconds)
         }
         
         playerItemStepForwardObserver = player.observe(\AVPlayer.currentItem?.canStepForward,
-                                                       options: [.new, .initial]) { [unowned self] player, _ in
+                                                       options: [.new, .initial]) { [weak self] player, _ in
             DispatchQueue.main.async {
-                self.stepForwardButton.isEnabled = player.currentItem?.canStepForward ?? false
+                self?.stepForwardButton?.isEnabled = player.currentItem?.canStepForward ?? false
             }
         }
         
         playerItemStepBackwardObserver = player.observe(\AVPlayer.currentItem?.canStepBackward,
-                                                   options: [.new, .initial]) { [unowned self] player, _ in
+                                                   options: [.new, .initial]) { [weak self] player, _ in
             DispatchQueue.main.async {
-                self.stepBackwardButton.isEnabled = player.currentItem?.canStepBackward ?? false
+                self?.stepBackwardButton?.isEnabled = player.currentItem?.canStepBackward ?? false
             }
         }
         
-        playerItemStatusObserver = player.observe(\AVPlayer.currentItem?.status, options: [.new, .initial]) { [unowned self] _, _ in
+        playerItemStatusObserver = player.observe(\AVPlayer.currentItem?.status, options: [.new, .initial]) { [weak self] _, _ in
             DispatchQueue.main.async {
-                self.updateUIforPlayerItemStatus()
+                self?.updateUIforPlayerItemStatus()
             }
         }
     }
@@ -259,6 +286,9 @@ class VideoViewController: UIViewController {
     }
     
     @IBAction func tapAction(_ sender: Any) {
+        guard let playbackControlsView = playbackControlsView,
+            let closeButton = closeButton else { return }
+        
         if playbackControlsView.isHidden == false && closeButton.isHidden == false {
             playbackControlsView.isHidden = true
             closeButton.isHidden = true
@@ -317,8 +347,8 @@ class VideoViewController: UIViewController {
         setButtonImage(with: buttonImage, of: playPauseButton)
     }
     
-    private func setButtonImage(with image: UIImage?, of button: UIButton) {
-        guard let image = image else { return }
+    private func setButtonImage(with image: UIImage?, of button: UIButton?) {
+        guard let image = image, let button = button else { return }
         
         let templateImage = resizedImage(at: image,
                                          for: CGSize(width: buttonsImageWidth,
@@ -337,7 +367,11 @@ class VideoViewController: UIViewController {
     
     private func updateUIforPlayerItemStatus() {
         guard let player = player,
-            let currentItem = player.currentItem else { return }
+            let currentItem = player.currentItem,
+            let playPauseButton = playPauseButton,
+            let timeSlider = timeSlider,
+            let elapsedTimeLabel = elapsedTimeLabel,
+            let remainingTimeLabel = remainingTimeLabel else { return }
         
         switch currentItem.status {
         case .failed:
